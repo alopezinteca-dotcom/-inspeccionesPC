@@ -1,5 +1,6 @@
-import streamlit as st
+import os
 import pandas as pd
+import streamlit as st
 
 # =========================================================
 # CONFIGURACIÓN GENERAL
@@ -12,12 +13,21 @@ st.set_page_config(
 )
 
 # =========================================================
+# RUTA DEL EXCEL XLSM
+# =========================================================
+
+RUTA_EXCEL = (
+    r"C:\Users\alejandro.lopez\OneDrive - Eurocontrol S.A"
+    r"\Attachments\Documentos\IA BASES DE DATOS"
+    r"\EXCEL 3.4.26.xlsm"
+)
+
+# =========================================================
 # CSS PERSONALIZADO
 # =========================================================
 
 st.markdown("""
 <style>
-
 .main {
     background-color: #f5f7fb;
 }
@@ -74,25 +84,8 @@ section[data-testid="stSidebar"] * {
     color: #64748b;
 }
 
-.estado-act {
-    background-color: #dcfce7;
-    color: #166534;
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-weight: 600;
-    font-size: 12px;
-}
-
-.estado-fac {
-    background-color: #ede9fe;
-    color: #6d28d9;
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-weight: 600;
-    font-size: 12px;
-}
-
-.estado-bt {
+.badge {
+    display: inline-block;
     background-color: #dbeafe;
     color: #1d4ed8;
     padding: 4px 10px;
@@ -100,22 +93,85 @@ section[data-testid="stSidebar"] * {
     font-weight: 600;
     font-size: 12px;
 }
-
 </style>
 """, unsafe_allow_html=True)
+
+# =========================================================
+# FUNCIÓN DE CARGA DE DATOS
+# =========================================================
+
+@st.cache_data(show_spinner="Cargando datos desde Excel...")
+def cargar_datos():
+    if not os.path.exists(RUTA_EXCEL):
+        raise FileNotFoundError(
+            f"No se encuentra el archivo:\n{RUTA_EXCEL}"
+        )
+
+    libro = pd.ExcelFile(RUTA_EXCEL, engine="openpyxl")
+
+    hojas_bd = [
+        hoja
+        for hoja in libro.sheet_names
+        if hoja.upper().startswith("BD")
+    ]
+
+    if not hojas_bd:
+        raise ValueError(
+            "No se encontraron hojas cuyo nombre comience por 'BD'."
+        )
+
+    dataframes = []
+
+    for hoja in hojas_bd:
+        df_hoja = pd.read_excel(
+            RUTA_EXCEL,
+            sheet_name=hoja,
+            engine="openpyxl"
+        )
+
+        df_hoja = df_hoja.dropna(how="all")
+
+        if df_hoja.empty:
+            continue
+
+        df_hoja["__HOJA_ORIGEN"] = hoja
+        dataframes.append(df_hoja)
+
+    if not dataframes:
+        raise ValueError(
+            "No se encontraron datos válidos en las hojas BD."
+        )
+
+    df_total = pd.concat(
+        dataframes,
+        ignore_index=True,
+        sort=False
+    )
+
+    df_total = df_total.dropna(axis=1, how="all")
+
+    df_total.columns = [
+        str(col).strip()
+        for col in df_total.columns
+    ]
+
+    return df_total
 
 # =========================================================
 # SIDEBAR
 # =========================================================
 
 with st.sidebar:
-
     st.markdown("# 🛠️ Gestor")
     st.markdown("### Inspecciones")
 
     st.divider()
 
-    st.markdown("## Gestión")
+    if st.button("🔄 Actualizar datos", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+
+    st.divider()
 
     st.button("📋 Inspecciones", use_container_width=True)
     st.button("🛒 Carrito de trabajo", use_container_width=True)
@@ -123,90 +179,15 @@ with st.sidebar:
     st.button("💰 Facturar", use_container_width=True)
     st.button("🏢 Clientes", use_container_width=True)
 
-    st.divider()
-
-    st.markdown("## Procesos")
-
-    st.button("⚙️ Procesar", use_container_width=True)
-    st.button("✏️ Modificar", use_container_width=True)
-    st.button("📌 Gestión ACT", use_container_width=True)
-
-    st.divider()
-
-    st.markdown("## Reportes")
-
-    st.button("📄 Informes", use_container_width=True)
-    st.button("📊 Estadísticas", use_container_width=True)
-
 # =========================================================
-# DATOS DE EJEMPLO
+# CARGA DE DATOS
 # =========================================================
 
-datos = {
-    "Estado": [
-        "ACT", "ACT", "FAC", "BT", "BT",
-        "ACT", "FAC", "BT", "ACT", "BT"
-    ],
-
-    "Código": [
-        "26-64-ASC-IP-0035",
-        "26-64-ASC-IP-0036",
-        "26-64-ASC-IP-0169",
-        "26-64-RBT-IP-0026",
-        "26-64-RBT-IP-0030",
-        "26-64-ASC-IP-0240",
-        "26-64-ASC-IP-0273",
-        "26-64-RBT-IP-0041",
-        "26-64-ASC-IP-0348",
-        "26-64-RBT-IP-0043"
-    ],
-
-    "Campo": [
-        "ASC", "ASC", "ASC", "BT", "BT",
-        "ASC", "ASC", "BT", "ASC", "BT"
-    ],
-
-    "Dirección": [
-        "CALLE OLIVAR 19",
-        "EDIF. DE FÁBRICA",
-        "CL. SANTA MARTA, 8",
-        "Sistema de Fabricación",
-        "QUESERIA EL TAJO",
-        "CL. CAMINO CASTILLEJOS, 5",
-        "CL. HEROE DE SOSTOA, 85",
-        "DIA RETAIL ESPAÑA",
-        "AV GRAN BRETAÑA 1",
-        "CONSUL SOCIEDAD COOP"
-    ],
-
-    "Cliente": [
-        "Cliente A",
-        "Cliente B",
-        "INDUSTRIAS TZBSAT",
-        "SAFI",
-        "QUESERIA",
-        "Cliente C",
-        "Cliente D",
-        "DIA",
-        "Cliente E",
-        "CONSUL"
-    ],
-
-    "Fecha": [
-        "26/01/2026",
-        "26/01/2026",
-        "26/01/2026",
-        "26/01/2026",
-        "26/01/2026",
-        "27/01/2026",
-        "28/01/2026",
-        "28/01/2026",
-        "29/01/2026",
-        "30/01/2026"
-    ]
-}
-
-df = pd.DataFrame(datos)
+try:
+    df = cargar_datos()
+except Exception as e:
+    st.error(f"Error al cargar el Excel: {e}")
+    st.stop()
 
 # =========================================================
 # CABECERA
@@ -218,7 +199,7 @@ st.markdown(
 )
 
 st.markdown(
-    '<p class="subtitulo">Panel de gestión moderno conectado a Excel Online</p>',
+    '<p class="subtitulo">Lectura automática del archivo EXCEL 3.4.26.xlsm</p>',
     unsafe_allow_html=True
 )
 
@@ -229,36 +210,28 @@ st.markdown(
 c1, c2, c3, c4 = st.columns(4)
 
 with c1:
-    st.markdown(f"""
-    <div class="kpi">
-        <h2>{len(df)}</h2>
-        <p>Registros</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="kpi"><h2>{len(df):,}</h2><p>Registros</p></div>',
+        unsafe_allow_html=True
+    )
 
 with c2:
-    st.markdown(f"""
-    <div class="kpi">
-        <h2>{len(df[df['Estado']=='ACT'])}</h2>
-        <p>ACT</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="kpi"><h2>{df["__HOJA_ORIGEN"].nunique()}</h2><p>Hojas BD</p></div>',
+        unsafe_allow_html=True
+    )
 
 with c3:
-    st.markdown(f"""
-    <div class="kpi">
-        <h2>{len(df[df['Estado']=='FAC'])}</h2>
-        <p>FAC</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="kpi"><h2>{len(df.columns)}</h2><p>Columnas</p></div>',
+        unsafe_allow_html=True
+    )
 
 with c4:
-    st.markdown(f"""
-    <div class="kpi">
-        <h2>{len(df[df['Estado']=='BT'])}</h2>
-        <p>BT</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="kpi"><h2>{RUTA_EXCEL.split("\\")[-1]}</h2><p>Archivo</p></div>',
+        unsafe_allow_html=True
+    )
 
 st.write("")
 
@@ -266,34 +239,21 @@ st.write("")
 # FILTROS
 # =========================================================
 
-with st.container():
+st.markdown('<div class="card">', unsafe_allow_html=True)
 
-    st.markdown('<div class="card">', unsafe_allow_html=True)
+col1, col2 = st.columns([1, 3])
 
-    col1, col2, col3, col4 = st.columns([1,1,1,2])
+with col1:
+    hojas = ["Todas"] + sorted(df["__HOJA_ORIGEN"].dropna().unique().tolist())
+    hoja_seleccionada = st.selectbox("Hoja", hojas)
 
-    with col1:
-        filtro_estado = st.selectbox(
-            "Estado",
-            ["Todos"] + sorted(df["Estado"].unique().tolist())
-        )
+with col2:
+    busqueda = st.text_input(
+        "Filtro rápido",
+        placeholder="Buscar en cualquier columna..."
+    )
 
-    with col2:
-        filtro_campo = st.selectbox(
-            "Campo",
-            ["Todos"] + sorted(df["Campo"].unique().tolist())
-        )
-
-    with col3:
-        filtro_fecha = st.date_input("Fecha")
-
-    with col4:
-        busqueda = st.text_input(
-            "Filtro rápido",
-            placeholder="Buscar código, cliente, dirección..."
-        )
-
-    st.markdown('</div>', unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================================================
 # FILTRADO
@@ -301,14 +261,12 @@ with st.container():
 
 df_filtrado = df.copy()
 
-if filtro_estado != "Todos":
-    df_filtrado = df_filtrado[df_filtrado["Estado"] == filtro_estado]
-
-if filtro_campo != "Todos":
-    df_filtrado = df_filtrado[df_filtrado["Campo"] == filtro_campo]
+if hoja_seleccionada != "Todas":
+    df_filtrado = df_filtrado[
+        df_filtrado["__HOJA_ORIGEN"] == hoja_seleccionada
+    ]
 
 if busqueda:
-
     mask = df_filtrado.astype(str).apply(
         lambda fila: fila.str.contains(
             busqueda,
@@ -317,88 +275,67 @@ if busqueda:
         ).any(),
         axis=1
     )
-
     df_filtrado = df_filtrado[mask]
 
 # =========================================================
 # CONTENIDO PRINCIPAL
 # =========================================================
 
-izq, der = st.columns([3,1])
+izq, der = st.columns([3, 1])
 
-# =========================================================
+# ---------------------------------------------------------
 # TABLA
-# =========================================================
+# ---------------------------------------------------------
 
 with izq:
-
     st.markdown('<div class="card">', unsafe_allow_html=True)
-
-    st.subheader("📑 Inspecciones")
+    st.subheader("📑 Registros")
 
     st.dataframe(
         df_filtrado,
         use_container_width=True,
-        height=600
+        height=650
     )
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-# =========================================================
+# ---------------------------------------------------------
 # PANEL DERECHO
-# =========================================================
+# ---------------------------------------------------------
 
 with der:
-
     st.markdown('<div class="card">', unsafe_allow_html=True)
-
     st.subheader("📌 Detalle")
 
     if len(df_filtrado) > 0:
-
         fila = df_filtrado.iloc[0]
 
-        estado = fila["Estado"]
-
-        if estado == "ACT":
-            badge = '<span class="estado-act">ACT</span>'
-        elif estado == "FAC":
-            badge = '<span class="estado-fac">FAC</span>'
-        else:
-            badge = '<span class="estado-bt">BT</span>'
+        st.markdown(
+            f"### {fila['__HOJA_ORIGEN']}"
+        )
 
         st.markdown(
-            f"## {fila['Código']} {badge}",
+            '<span class="badge">Primer registro filtrado</span>',
             unsafe_allow_html=True
         )
 
         st.write("")
 
-        st.markdown(f"**Campo:** {fila['Campo']}")
-        st.markdown(f"**Dirección:** {fila['Dirección']}")
-        st.markdown(f"**Cliente:** {fila['Cliente']}")
-        st.markdown(f"**Fecha:** {fila['Fecha']}")
+        columnas_mostrar = [
+            col for col in df_filtrado.columns[:15]
+            if pd.notna(fila[col]) and str(fila[col]).strip() != ""
+        ]
+
+        for col in columnas_mostrar:
+            st.markdown(f"**{col}:** {fila[col]}")
 
         st.write("")
 
-        st.button(
-            "🛒 Añadir al carrito",
-            use_container_width=True
-        )
-
-        st.button(
-            "📄 Generar informe",
-            use_container_width=True
-        )
-
-        st.button(
-            "💰 Facturar",
-            use_container_width=True
-        )
-
-        st.button(
-            "⚙️ Procesar",
-            use_container_width=True
-        )
+        st.button("🛒 Añadir al carrito", use_container_width=True)
+        st.button("📄 Generar Word", use_container_width=True)
+        st.button("📑 Generar PDF", use_container_width=True)
+        st.button("⚙️ Procesar", use_container_width=True)
+    else:
+        st.info("No hay registros para mostrar.")
 
     st.markdown('</div>', unsafe_allow_html=True)

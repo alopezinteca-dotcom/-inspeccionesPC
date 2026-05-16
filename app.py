@@ -1,3 +1,12 @@
+# APP.PY COMPLETO
+# =========================================================
+# Gestor de Inspecciones
+# - Configuración inicial de ruta del Excel (solo primera vez)
+# - Lectura de archivo .xlsm/.xlsx
+# - Carga de todas las hojas que empiecen por "BD"
+# - Dashboard visual moderno
+# =========================================================
+
 import os
 import pandas as pd
 import streamlit as st
@@ -12,15 +21,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# =========================================================
-# RUTA DEL EXCEL XLSM
-# =========================================================
-
-RUTA_EXCEL = (
-    r"C:\Users\alejandro.lopez\OneDrive - Eurocontrol S.A"
-    r"\Attachments\Documentos\IA BASES DE DATOS"
-    r"\EXCEL 3.4.26.xlsm"
-)
+CONFIG_FILE = "config_ruta_excel.txt"
 
 # =========================================================
 # CSS PERSONALIZADO
@@ -97,21 +98,69 @@ section[data-testid="stSidebar"] * {
 """, unsafe_allow_html=True)
 
 # =========================================================
-# FUNCIÓN DE CARGA DE DATOS
+# FUNCIONES DE CONFIGURACIÓN
+# =========================================================
+
+def guardar_ruta_excel(ruta):
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        f.write(ruta.strip())
+
+def cargar_ruta_excel_guardada():
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    return ""
+
+def obtener_ruta_excel():
+    ruta_guardada = cargar_ruta_excel_guardada()
+
+    if ruta_guardada and os.path.exists(ruta_guardada):
+        return ruta_guardada
+
+    st.title("⚙️ Configuración inicial")
+    st.info(
+        "Introduzca la ruta completa del archivo Excel (.xlsm o .xlsx).\n\n"
+        "Esta configuración solo se solicitará la primera vez."
+    )
+
+    ruta_sugerida = (
+        r"C:\Users\alejandro.lopez\OneDrive - Eurocontrol S.A"
+        r"\Attachments\Documentos\IA BASES DE DATOS"
+        r"\EXCEL 3.4.26.xlsm"
+    )
+
+    ruta = st.text_input(
+        "Ruta completa del archivo Excel",
+        value=ruta_guardada or ruta_sugerida
+    )
+
+    if st.button("✅ Guardar configuración", use_container_width=True):
+        if not ruta.strip():
+            st.error("Debe indicar una ruta.")
+            st.stop()
+
+        if not os.path.exists(ruta):
+            st.error("El archivo no existe en la ruta indicada.")
+            st.stop()
+
+        guardar_ruta_excel(ruta)
+        st.success("Ruta guardada correctamente.")
+        st.rerun()
+
+    st.stop()
+
+RUTA_EXCEL = obtener_ruta_excel()
+
+# =========================================================
+# CARGA DE DATOS
 # =========================================================
 
 @st.cache_data(show_spinner="Cargando datos desde Excel...")
 def cargar_datos():
-    if not os.path.exists(RUTA_EXCEL):
-        raise FileNotFoundError(
-            f"No se encuentra el archivo:\n{RUTA_EXCEL}"
-        )
-
     libro = pd.ExcelFile(RUTA_EXCEL, engine="openpyxl")
 
     hojas_bd = [
-        hoja
-        for hoja in libro.sheet_names
+        hoja for hoja in libro.sheet_names
         if hoja.upper().startswith("BD")
     ]
 
@@ -138,9 +187,7 @@ def cargar_datos():
         dataframes.append(df_hoja)
 
     if not dataframes:
-        raise ValueError(
-            "No se encontraron datos válidos en las hojas BD."
-        )
+        raise ValueError("No se encontraron datos válidos.")
 
     df_total = pd.concat(
         dataframes,
@@ -149,11 +196,7 @@ def cargar_datos():
     )
 
     df_total = df_total.dropna(axis=1, how="all")
-
-    df_total.columns = [
-        str(col).strip()
-        for col in df_total.columns
-    ]
+    df_total.columns = [str(c).strip() for c in df_total.columns]
 
     return df_total
 
@@ -180,7 +223,7 @@ with st.sidebar:
     st.button("🏢 Clientes", use_container_width=True)
 
 # =========================================================
-# CARGA DE DATOS
+# LECTURA DEL EXCEL
 # =========================================================
 
 try:
@@ -199,7 +242,7 @@ st.markdown(
 )
 
 st.markdown(
-    '<p class="subtitulo">Lectura automática del archivo EXCEL 3.4.26.xlsm</p>',
+    f'<p class="subtitulo">Archivo: {os.path.basename(RUTA_EXCEL)}</p>',
     unsafe_allow_html=True
 )
 
@@ -229,7 +272,7 @@ with c3:
 
 with c4:
     st.markdown(
-        f'<div class="kpi"><h2>{RUTA_EXCEL.split("\\")[-1]}</h2><p>Archivo</p></div>',
+        f'<div class="kpi"><h2>{os.path.basename(RUTA_EXCEL)}</h2><p>Archivo</p></div>',
         unsafe_allow_html=True
     )
 
@@ -244,7 +287,9 @@ st.markdown('<div class="card">', unsafe_allow_html=True)
 col1, col2 = st.columns([1, 3])
 
 with col1:
-    hojas = ["Todas"] + sorted(df["__HOJA_ORIGEN"].dropna().unique().tolist())
+    hojas = ["Todas"] + sorted(
+        df["__HOJA_ORIGEN"].dropna().unique().tolist()
+    )
     hoja_seleccionada = st.selectbox("Hoja", hojas)
 
 with col2:
@@ -283,10 +328,6 @@ if busqueda:
 
 izq, der = st.columns([3, 1])
 
-# ---------------------------------------------------------
-# TABLA
-# ---------------------------------------------------------
-
 with izq:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("📑 Registros")
@@ -299,10 +340,6 @@ with izq:
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ---------------------------------------------------------
-# PANEL DERECHO
-# ---------------------------------------------------------
-
 with der:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("📌 Detalle")
@@ -310,10 +347,7 @@ with der:
     if len(df_filtrado) > 0:
         fila = df_filtrado.iloc[0]
 
-        st.markdown(
-            f"### {fila['__HOJA_ORIGEN']}"
-        )
-
+        st.markdown(f"### {fila['__HOJA_ORIGEN']}")
         st.markdown(
             '<span class="badge">Primer registro filtrado</span>',
             unsafe_allow_html=True
